@@ -62,6 +62,7 @@ const DoctorDashboard = () => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportContent, setReportContent] = useState('');
   const [creatingReport, setCreatingReport] = useState(false);
+  const [reportEditable, setReportEditable] = useState(false);
 
   // Fetch appointments assigned to the logged-in doctor
   useEffect(() => {
@@ -130,7 +131,10 @@ const DoctorDashboard = () => {
     try {
       setLoading(true);
       const response = await apiClient.get('/appointments/');
-      setAppointments(response.data);
+      // Handle both array response and paginated response
+      const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
+      console.log('Doktor randevuları:', data);
+      setAppointments(data);
     } catch (err) {
       console.error('Error fetching appointments:', err);
       setError('Randevular yüklenemedi');
@@ -142,7 +146,9 @@ const DoctorDashboard = () => {
   const fetchLeaveRequests = async () => {
     try {
       const response = await apiClient.get('/leave-requests/');
-      setLeaveRequests(response.data);
+      // Handle both array response and paginated response
+      const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
+      setLeaveRequests(data);
     } catch (err) {
       console.error('Error fetching leave requests:', err);
       // Hata durumunda boş liste bırak, ekran çalışmaya devam etsin
@@ -378,6 +384,7 @@ const DoctorDashboard = () => {
       setSelectedAppointment({...selectedAppointment, has_medical_report: true});
       
       setSuccess('Rapor başarıyla oluşturuldu!');
+      setReportEditable(false);
       fetchAppointments(); // Randevuları yenile
       
       // Bildirimi 3 saniye sonra kapat
@@ -386,7 +393,33 @@ const DoctorDashboard = () => {
       }, 3000);
     } catch (err) {
       console.error('Error creating report:', err);
-      setError(err.response?.data?.detail || 'Rapor oluşturulamadı');
+      // Normalize backend error message for display
+      let errorMessage = 'Rapor oluşturulamadı';
+      if (err.response?.data) {
+        const data = err.response.data;
+        if (typeof data === 'string') {
+          errorMessage = data;
+        } else if (data.detail) {
+          errorMessage = data.detail;
+        } else {
+          // Flatten validation errors
+          try {
+            const parts = [];
+            Object.keys(data).forEach((k) => {
+              const val = data[k];
+              if (Array.isArray(val)) parts.push(`${k}: ${val.join(', ')}`);
+              else if (typeof val === 'string') parts.push(`${k}: ${val}`);
+              else parts.push(`${k}: ${JSON.stringify(val)}`);
+            });
+            if (parts.length > 0) errorMessage = parts.join(' | ');
+          } catch (e) {
+            errorMessage = JSON.stringify(data);
+          }
+        }
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      setError(errorMessage);
     } finally {
       setCreatingReport(false);
     }
@@ -399,6 +432,7 @@ const DoctorDashboard = () => {
       // Rapor varsa görüntüleme modal'ını aç
       setReportContent(response.data.report_content || '');
       setSelectedAppointment({...appointment, has_medical_report: true});
+      setReportEditable(false);
       setShowReportModal(true);
     } catch (err) {
       console.error('Error fetching report:', err);
@@ -406,6 +440,7 @@ const DoctorDashboard = () => {
         // Rapor yoksa, oluşturma modal'ını aç
         setReportContent('');
         setSelectedAppointment({...appointment, has_medical_report: false});
+        setReportEditable(true);
         setShowReportModal(true);
       } else {
         setError(err.response?.data?.detail || 'Rapor yüklenemedi');
@@ -659,10 +694,13 @@ const DoctorDashboard = () => {
               
               <div className="bg-white shadow rounded-lg p-6">
                 <h3 className="text-lg font-bold text-gray-800 mb-4">Bugünün Randevuları</h3>
-                {appointments.filter(apt => apt.date === new Date().toISOString().split('T')[0]).length > 0 ? (
+                {(() => {
+                  const today = new Date();
+                  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                  const todayAppointments = appointments.filter(apt => apt.date === todayStr);
+                  return todayAppointments.length > 0 ? (
                   <div className="space-y-2">
-                    {appointments
-                      .filter(apt => apt.date === new Date().toISOString().split('T')[0])
+                    {todayAppointments
                       .map(apt => (
                         <div key={apt.id} className="p-3 bg-gray-50 rounded-lg border-l-4 border-indigo-500">
                           <p className="font-medium text-gray-900">{apt.patient_name || apt.patient_username}</p>
@@ -684,7 +722,8 @@ const DoctorDashboard = () => {
                   </div>
                 ) : (
                   <p className="text-gray-500 text-sm">Bugün randevu yok</p>
-                )}
+                );
+                })()}
               </div>
             </div>
           ) : (
@@ -1852,7 +1891,7 @@ const DoctorDashboard = () => {
                 </p>
               </div>
 
-              {selectedAppointment.has_medical_report || reportContent ? (
+              {selectedAppointment.has_medical_report && !reportEditable ? (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">

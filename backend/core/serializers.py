@@ -17,12 +17,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     
     def validate(self, attrs):
         data = super().validate(attrs)
-        
-        # Hasta girişi engellendi
-        if self.user.user_type == 4:  # Patient
-            from rest_framework.exceptions import AuthenticationFailed
-            raise AuthenticationFailed('Hasta girişi devre dışı bırakılmıştır. Randevu almak için ana sayfayı kullanabilirsiniz.')
-        
         # Add user information to response
         data['user_id'] = self.user.id
         data['username'] = self.user.username
@@ -236,7 +230,8 @@ class PublicAppointmentSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(write_only=True, required=True)
     email = serializers.EmailField(write_only=True, required=True)
     phone = serializers.CharField(write_only=True, required=True)
-    national_id = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    national_id = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
+    notes = serializers.CharField(write_only=True, required=False, allow_blank=True)
     
     doctor_name = serializers.CharField(source='doctor.user.get_full_name', read_only=True)
     department_name = serializers.StringRelatedField(source='doctor.department', read_only=True)
@@ -317,7 +312,10 @@ class PublicAppointmentSerializer(serializers.ModelSerializer):
             username = f"{base_username}{counter}"
             counter += 1
         
-        # Check if user exists by email
+        # Check if user exists by email or national_id
+        patient = None
+        
+        # First, try to get by email
         try:
             patient = CustomUser.objects.get(email=email)
             # Update patient info if user already exists
@@ -328,17 +326,43 @@ class PublicAppointmentSerializer(serializers.ModelSerializer):
                 patient.national_id = national_id
             patient.save()
         except CustomUser.DoesNotExist:
-            # Create new patient user
-            patient = CustomUser.objects.create(
-                username=username,
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-                phone=phone,
-                national_id=national_id if national_id else None,
-                user_type=4,  # Patient
-                is_active=True,
-            )
+            # If national_id provided, check if it already exists
+            if national_id:
+                try:
+                    patient = CustomUser.objects.get(national_id=national_id)
+                    # Update existing patient with same national_id
+                    patient.first_name = first_name
+                    patient.last_name = last_name
+                    patient.email = email
+                    patient.phone = phone
+                    # Update username if needed
+                    if patient.username != username:
+                        patient.username = username
+                    patient.save()
+                except CustomUser.DoesNotExist:
+                    # Create new patient user
+                    patient = CustomUser.objects.create(
+                        username=username,
+                        email=email,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone=phone,
+                        national_id=national_id,
+                        user_type=4,  # Patient
+                        is_active=True,
+                    )
+            else:
+                # Create new patient user without national_id
+                patient = CustomUser.objects.create(
+                    username=username,
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone=phone,
+                    national_id=None,
+                    user_type=4,  # Patient
+                    is_active=True,
+                )
         
         # Determine appointment fee - use department fee if available, otherwise default
         doctor = validated_data['doctor']

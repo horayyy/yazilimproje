@@ -139,11 +139,17 @@ const AdminDashboard = () => {
         apiClient.get('/leave-requests/').catch(() => ({ data: [] })), // Optional
       ]);
       
-      setAppointments(appointmentsRes.data);
-      calculateStats(appointmentsRes.data);
-      setLeaveRequests(leaveRequestsRes.data || []);
-      setDepartments(departmentsRes.data);
-      setDoctors(doctorsRes.data);
+      // Handle both array response and paginated response
+      const appointmentsData = Array.isArray(appointmentsRes.data) ? appointmentsRes.data : (appointmentsRes.data.results || []);
+      const leaveRequestsData = Array.isArray(leaveRequestsRes.data) ? leaveRequestsRes.data : (leaveRequestsRes.data.results || []);
+      const departmentsData = Array.isArray(departmentsRes.data) ? departmentsRes.data : (departmentsRes.data.results || []);
+      const doctorsData = Array.isArray(doctorsRes.data) ? doctorsRes.data : (doctorsRes.data.results || []);
+      
+      setAppointments(appointmentsData);
+      calculateStats(appointmentsData);
+      setLeaveRequests(leaveRequestsData);
+      setDepartments(departmentsData);
+      setDoctors(doctorsData);
       
       // Emergency service - get first item or create default
       if (emergencyRes.data && emergencyRes.data.length > 0) {
@@ -572,10 +578,15 @@ const AdminDashboard = () => {
             apiClient.get('/doctors/'),
           ]);
           
-          setAppointments(appointmentsRes.data);
-          calculateStats(appointmentsRes.data);
-          setDepartments(departmentsRes.data);
-          setDoctors(doctorsRes.data);
+          // Handle both array response and paginated response
+          const appointmentsData = Array.isArray(appointmentsRes.data) ? appointmentsRes.data : (appointmentsRes.data.results || []);
+          const departmentsData = Array.isArray(departmentsRes.data) ? departmentsRes.data : (departmentsRes.data.results || []);
+          const doctorsData = Array.isArray(doctorsRes.data) ? doctorsRes.data : (doctorsRes.data.results || []);
+          
+          setAppointments(appointmentsData);
+          calculateStats(appointmentsData);
+          setDepartments(departmentsData);
+          setDoctors(doctorsData);
         } catch (fetchErr) {
           console.error('Fetch error:', fetchErr);
           // Hata olsa bile verileri yeniden yükle
@@ -1811,8 +1822,11 @@ const AdminDashboard = () => {
                               const wb = XLSX.utils.book_new();
                               XLSX.utils.book_append_sheet(wb, ws, 'Haftalık Vardiya');
                               
-                              // İndir
-                              const fileName = `Acil_Servis_Haftalik_Vardiya_${today.toISOString().split('T')[0]}.xlsx`;
+                              // İndir - local date formatı kullan
+                              const year = today.getFullYear();
+                              const month = String(today.getMonth() + 1).padStart(2, '0');
+                              const day = String(today.getDate()).padStart(2, '0');
+                              const fileName = `Acil_Servis_Haftalik_Vardiya_${year}-${month}-${day}.xlsx`;
                               XLSX.writeFile(wb, fileName);
                               
                               setSuccess('Haftalık vardiya takvimi Excel olarak indirildi!');
@@ -1915,8 +1929,11 @@ const AdminDashboard = () => {
                                 margin: { left: 14, right: 14 }
                               });
                               
-                              // İndir
-                              const fileName = `Acil_Servis_Haftalik_Vardiya_${today.toISOString().split('T')[0]}.pdf`;
+                              // İndir - local date formatı kullan
+                              const year = today.getFullYear();
+                              const month = String(today.getMonth() + 1).padStart(2, '0');
+                              const day = String(today.getDate()).padStart(2, '0');
+                              const fileName = `Acil_Servis_Haftalik_Vardiya_${year}-${month}-${day}.pdf`;
                               doc.save(fileName);
                               
                               setSuccess('Haftalık vardiya takvimi PDF olarak indirildi!');

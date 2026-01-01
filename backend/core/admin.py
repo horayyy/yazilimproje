@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import CustomUser, Department, Doctor, Appointment, EmergencyService
@@ -27,14 +28,36 @@ class DepartmentAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description')
 
 
+class DoctorAdminForm(forms.ModelForm):
+    class Meta:
+        model = Doctor
+        fields = '__all__'
+
+    def clean(self):
+        cleaned = super().clean()
+        # If emergency doctor, enforce department = None to keep data consistent
+        if cleaned.get('is_emergency_doctor'):
+            cleaned['department'] = None
+        return cleaned
+
+
 @admin.register(Doctor)
 class DoctorAdmin(admin.ModelAdmin):
-    """Admin configuration for Doctor model"""
-    
-    list_display = ('user', 'department', 'title', 'is_active')
-    list_filter = ('department', 'is_active', 'title')
+    """Admin configuration for Doctor model with department hidden for emergency doctors"""
+
+    form = DoctorAdminForm
+    list_display = ('user', 'department', 'title', 'is_emergency_doctor', 'is_active')
+    list_filter = ('department', 'is_active', 'title', 'is_emergency_doctor')
     search_fields = ('user__username', 'user__first_name', 'user__last_name', 'title')
     raw_id_fields = ('user',)
+
+    def get_fields(self, request, obj=None):
+        """Hide `department` field when editing an emergency doctor to avoid accidental assignment."""
+        fields = list(super().get_fields(request, obj))
+        if obj and getattr(obj, 'is_emergency_doctor', False):
+            if 'department' in fields:
+                fields.remove('department')
+        return fields
 
 
 @admin.register(Appointment)

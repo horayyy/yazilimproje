@@ -41,6 +41,13 @@ function HomePage() {
     ? poliklinikDoctors.filter(doctor => doctor.department === parseInt(selectedDepartment))
     : poliklinikDoctors;
 
+  const getInitials = (doctor) => {
+    const name = doctor.doctor_name || doctor.doctor_username || '';
+    const parts = name.split(' ');
+    if (parts.length === 1) return parts[0].slice(0,2).toUpperCase();
+    return (parts[0][0] + parts[parts.length-1][0]).toUpperCase();
+  }
+
   const handleBookAppointment = (doctor) => {
     setSelectedDoctor(doctor);
     setShowBookingForm(true);
@@ -80,6 +87,21 @@ function HomePage() {
           <p className="text-xl text-gray-600">
             Uzman doktorlarımızdan online randevu alabilirsiniz
           </p>
+          <div className="mt-6">
+            <button
+              onClick={() => {
+                // scroll to doctors
+                const el = document.getElementById('doctors-grid');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className="inline-flex items-center gap-3 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 text-white px-6 py-3 rounded-full shadow-lg font-medium transition"
+            >
+              Hemen Randevu Al
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Emergency Service Info Box */}
@@ -140,33 +162,41 @@ function HomePage() {
         </div>
 
         {/* Doctors Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div id="doctors-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredDoctors.map(doctor => (
             <div
               key={doctor.id}
-              className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
+              className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transform hover:-translate-y-1 transition relative overflow-hidden"
             >
-              <div className="flex items-start justify-between mb-4">
-                <div>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex-shrink-0">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-lg">
+                    {getInitials(doctor)}
+                  </div>
+                </div>
+                <div className="flex-1">
                   <h3 className="text-xl font-semibold text-gray-900">
                     {doctor.doctor_name || 'Dr. ' + doctor.doctor_username}
                   </h3>
-                  {doctor.title && (
-                    <p className="text-sm text-gray-500">{doctor.title}</p>
-                  )}
-                  {doctor.department_name && (
-                    <p className="text-sm text-indigo-600 font-medium mt-1">
-                      {doctor.department_name}
-                    </p>
+                  <p className="text-sm text-gray-500 mt-1">{doctor.title || 'Uzman Doktor'}</p>
+                  {doctor.department_name ? (
+                    <span className="inline-block mt-2 px-2 py-1 text-xs bg-indigo-50 text-indigo-700 rounded-full font-medium">{doctor.department_name}</span>
+                  ) : (
+                    <span className="inline-block mt-2 px-2 py-1 text-xs bg-green-50 text-green-700 rounded-full font-medium">Acil Servis</span>
                   )}
                 </div>
               </div>
-              <button
-                onClick={() => handleBookAppointment(doctor)}
-                className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition font-medium"
-              >
-                Randevu Al
-              </button>
+
+              <p className="text-sm text-gray-600 mb-4">Deneyimli, hasta odaklı hizmet. Hızlı kayıt ve güvenli randevu.</p>
+
+              <div className="flex">
+                <button
+                  onClick={() => handleBookAppointment(doctor)}
+                  className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition font-medium"
+                >
+                  Randevu Al
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -201,7 +231,6 @@ function AppointmentBookingModal({ doctor, appointmentFee, onClose }) {
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
-    birth_date: '',
     national_id: '',
     email: '',
     phone: '',
@@ -239,16 +268,27 @@ function AppointmentBookingModal({ doctor, appointmentFee, onClose }) {
         params: { date: formData.date }
       })
         .then(response => {
-          setAvailableSlots(response.data.available_slots || []);
+          const slots = response.data.available_slots || [];
+          console.log('Müsait saatler:', slots);
+          setAvailableSlots(slots);
           // Clear time if current selection is not available
-          if (formData.time && !response.data.available_slots.includes(formData.time)) {
+          if (formData.time && !slots.includes(formData.time)) {
             setFormData({ ...formData, time: '' });
           }
         })
         .catch(error => {
           console.error('Error fetching available slots:', error);
+          console.error('Error response:', error.response?.data);
+          
+          // Handle different error types
           if (error.response?.data?.date) {
             setError(error.response.data.date[0] || 'Bu tarih için randevu alınamaz.');
+          } else if (error.response?.data?.error) {
+            setError(error.response.data.error);
+          } else if (error.response?.data) {
+            setError('Bu tarihte müsait saat bulunmamaktadır.');
+          } else {
+            setError('Müsait saatler yüklenirken bir hata oluştu.');
           }
           setAvailableSlots([]);
         })
@@ -268,10 +308,6 @@ function AppointmentBookingModal({ doctor, appointmentFee, onClose }) {
     }
     if (!formData.last_name.trim()) {
       setError('Soyad alanı zorunludur.');
-      return false;
-    }
-    if (!formData.birth_date) {
-      setError('Doğum tarihi zorunludur.');
       return false;
     }
     if (!formData.national_id.trim()) {
@@ -361,7 +397,6 @@ function AppointmentBookingModal({ doctor, appointmentFee, onClose }) {
                 setFormData({
                   first_name: '',
                   last_name: '',
-                  birth_date: '',
                   national_id: '',
                   email: '',
                   phone: '',
@@ -454,20 +489,6 @@ function AppointmentBookingModal({ doctor, appointmentFee, onClose }) {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Doğum Tarihi <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                required
-                max={new Date().toISOString().split('T')[0]}
-                value={formData.birth_date}
-                onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
                 TC Kimlik No <span className="text-red-500">*</span>
               </label>
               <input
@@ -543,7 +564,13 @@ function AppointmentBookingModal({ doctor, appointmentFee, onClose }) {
               <input
                 type="date"
                 required
-                min={new Date().toISOString().split('T')[0]}
+                min={(() => {
+                  const today = new Date();
+                  const year = today.getFullYear();
+                  const month = String(today.getMonth() + 1).padStart(2, '0');
+                  const day = String(today.getDate()).padStart(2, '0');
+                  return `${year}-${month}-${day}`;
+                })()}
                 value={formData.date}
                 onChange={(e) => {
                   const selectedDate = new Date(e.target.value);

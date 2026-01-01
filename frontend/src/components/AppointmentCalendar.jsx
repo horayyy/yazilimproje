@@ -5,9 +5,17 @@ import 'react-calendar/dist/Calendar.css';
 const AppointmentCalendar = ({ appointments, onDateSelect, selectedDate, mode = 'appointments' }) => {
   // mode: 'appointments' (randevu sayısı) veya 'revenue' (gelir)
 
+  // Helper function to format date in local timezone (YYYY-MM-DD)
+  const formatLocalDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Get appointments for a specific date
   const getAppointmentsForDate = (date) => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatLocalDate(date);
     return appointments.filter(apt => apt.date === dateStr);
   };
 
@@ -18,14 +26,11 @@ const AppointmentCalendar = ({ appointments, onDateSelect, selectedDate, mode = 
 
   // Get total revenue for a specific date (from created_at, only completed appointments)
   const getRevenueForDate = (date) => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatLocalDate(date);
     const dateAppointments = appointments.filter(apt => {
       if (!apt.created_at || apt.status !== 'completed') return false;
       const createdDate = new Date(apt.created_at);
-      const createdYear = createdDate.getFullYear();
-      const createdMonth = String(createdDate.getMonth() + 1).padStart(2, '0');
-      const createdDay = String(createdDate.getDate()).padStart(2, '0');
-      const createdStr = `${createdYear}-${createdMonth}-${createdDay}`;
+      const createdStr = formatLocalDate(createdDate);
       return createdStr === dateStr;
     });
     
@@ -70,8 +75,8 @@ const AppointmentCalendar = ({ appointments, onDateSelect, selectedDate, mode = 
   // Custom tile className - mode'a göre vurgulama
   const tileClassName = ({ date, view }) => {
     if (view === 'month') {
-      const dateStr = date.toISOString().split('T')[0];
-      const today = new Date().toISOString().split('T')[0];
+      const dateStr = formatLocalDate(date);
+      const today = formatLocalDate(new Date());
       
       if (mode === 'appointments') {
         const count = getAppointmentCount(date);

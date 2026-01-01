@@ -93,9 +93,20 @@ class DoctorViewSet(viewsets.ModelViewSet):
         try:
             from datetime import datetime
             date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            # Debug logging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Getting available slots for doctor {doctor.id} on {date_str}")
+            logger.info(f"Doctor working_hours: {doctor.working_hours}")
+            logger.info(f"Doctor leave_dates: {doctor.leave_dates}")
+            logger.info(f"Is available on date: {doctor.is_available_on_date(date)}")
+            
             slots = doctor.get_available_time_slots(date)
+            logger.info(f"Available slots: {slots}")
+            
             return Response({'available_slots': slots})
-        except ValueError:
+        except ValueError as e:
             return Response(
                 {'error': 'Invalid date format. Use YYYY-MM-DD'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -523,11 +534,25 @@ class PublicAppointmentView(CreateAPIView):
     permission_classes = [AllowAny]
     
     def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        
-        # Email gönderme işlemi serializer içinde yapılıyor
-        # Burada sadece response'u döndürüyoruz
-        return response
+        try:
+            response = super().create(request, *args, **kwargs)
+            # Email gönderme işlemi serializer içinde yapılıyor
+            # Burada sadece response'u döndürüyoruz
+            return response
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Public appointment creation error: {str(e)}", exc_info=True)
+            
+            # Handle integrity errors (duplicate national_id, etc.)
+            if 'IntegrityError' in str(type(e).__name__) or 'UNIQUE constraint failed' in str(e):
+                return Response(
+                    {'error': 'Bu TC Kimlik No veya E-posta adresi ile zaten bir randevu oluşturulmuş. Lütfen farklı bilgiler ile deneyin.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Re-raise other exceptions
+            raise
 
 
 class EmergencyServiceViewSet(viewsets.ModelViewSet):
